@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI20K — Hiểu cảnh quan bằng VLM (real CV)</title>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+<style>
+  :root{--bg:#05070f;--txt:#eaf0ff;--muted:#93a0c4;--indigo:#6d5efc;--violet:#8b7bff;--cyan:#22d3ee;--sky:#38bdf8;--magenta:#f472b6;
+        --glass:rgba(255,255,255,.045);--glass2:rgba(255,255,255,.07);--line:rgba(255,255,255,.11);--ok:#34d399;--warn:#fbbf24;--bad:#fb7185;}
+  *{box-sizing:border-box} html,body{height:100%}
+  body{margin:0;font-family:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--txt);overflow:hidden}
+  button{font-family:inherit;cursor:pointer} .hidden{display:none !important}
+  #bg{position:fixed;inset:0;width:100%;height:100%;z-index:0;display:block}
+  .veil{position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(120% 80% at 50% -10%, rgba(109,94,252,.18), transparent 55%),radial-gradient(80% 60% at 90% 110%, rgba(34,211,238,.12), transparent 60%)}
+  .glass{background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--line);border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06)}
+  .chip{display:inline-flex;gap:8px;align-items:center;font-size:12px;letter-spacing:.4px;color:#c9d3f5;padding:6px 13px;border-radius:999px;border:1px solid var(--line);background:var(--glass)}
+  .grad{background:linear-gradient(100deg,var(--violet),var(--cyan) 60%,var(--sky));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .glow-btn{border:0;border-radius:12px;padding:12px 18px;font-weight:700;font-size:14px;color:#fff;background:linear-gradient(100deg,var(--indigo),var(--violet));transition:transform .15s, box-shadow .25s, opacity .2s;box-shadow:0 8px 24px rgba(109,94,252,.45)}
+  .glow-btn:hover{transform:translateY(-2px);box-shadow:0 12px 34px rgba(109,94,252,.7)} .glow-btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
+  .glow-btn.ghost{background:var(--glass2);box-shadow:none;border:1px solid var(--line)} .glow-btn.sm{padding:9px 14px;font-size:13px}
+  #hero{position:relative;z-index:2;height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;transition:opacity .7s, transform .7s}
+  #hero.gone{opacity:0;transform:scale(1.04);pointer-events:none}
+  .hero-inner{max-width:720px;padding:24px;animation:fadeUp .9s both}
+  .hero-title{font-size:clamp(40px,7vw,80px);line-height:1.03;margin:16px 0 14px;font-weight:800;letter-spacing:-2px}
+  .hero-sub{color:var(--muted);font-size:clamp(15px,2vw,18px);margin:0 auto 24px;max-width:560px;line-height:1.6}
+  .login-card{display:flex;gap:10px;align-items:center;padding:12px;max-width:480px;margin:0 auto;flex-wrap:wrap}
+  .login-card input{flex:1;min-width:130px;padding:12px 14px;border-radius:11px;border:1px solid var(--line);background:rgba(0,0,0,.25);color:var(--txt);font-size:14px;outline:none}
+  .login-card input:focus{border-color:var(--violet)}
+  .hint{margin-top:16px;color:var(--muted);font-size:12.5px}
+  .pulse-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--cyan);margin-right:7px;box-shadow:0 0 0 0 rgba(34,211,238,.7);animation:ping 1.8s infinite}
+  #app{position:relative;z-index:2;height:100vh;display:grid;grid-template-columns:248px 1fr;opacity:0;transition:opacity .7s} #app.show{opacity:1}
+  #side{margin:14px 0 14px 14px;padding:18px 14px;display:flex;flex-direction:column}
+  .brand{display:flex;align-items:center;gap:11px;font-weight:800;font-size:18px}
+  .brand .dot{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,var(--indigo),var(--cyan));box-shadow:0 6px 18px rgba(109,94,252,.5)}
+  .nav{margin-top:18px;display:flex;flex-direction:column;gap:6px}
+  .nav a{display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:12px;color:var(--muted);font-size:14px;cursor:pointer;border:1px solid transparent;transition:.18s}
+  .nav a:hover{background:var(--glass);color:var(--txt)} .nav a.active{background:linear-gradient(100deg,rgba(109,94,252,.28),rgba(34,211,238,.14));color:#fff;border-color:var(--line)}
+  .nav a .ic{width:20px;text-align:center} .nav a .lock{margin-left:auto;font-size:10.5px;color:var(--warn)}
+  .usercard{margin-top:auto;border-top:1px solid var(--line);padding-top:12px}
+  .urow{display:flex;align-items:center;gap:10px} .avatar{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-weight:700;color:#fff;background:linear-gradient(135deg,var(--magenta),var(--violet))}
+  .roleToggle{display:flex;margin-top:10px;border:1px solid var(--line);border-radius:11px;overflow:hidden;background:rgba(0,0,0,.2)}
+  .roleToggle button{flex:1;padding:7px;border:0;background:transparent;color:var(--muted);font-size:12px} .roleToggle button.on{background:linear-gradient(100deg,var(--indigo),var(--violet));color:#fff;font-weight:700}
+  #main{overflow:auto;padding:18px 22px 30px} #main::-webkit-scrollbar{width:9px} #main::-webkit-scrollbar-thumb{background:var(--line);border-radius:9px}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:10px;flex-wrap:wrap;animation:fadeUp .5s both}
+  .top h1{font-size:21px;margin:0;font-weight:800;letter-spacing:-.5px}
+  .top .meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .url{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--cyan)}
+  .pill{font-size:11.5px;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:rgba(0,0,0,.25);color:var(--muted)}
+  .pill.ready{color:#9be9ff;border-color:rgba(56,189,248,.4)} .pill.load{color:#ffd98a;border-color:rgba(251,191,36,.4)} .pill.err{color:#fda4af;border-color:rgba(251,113,133,.45)} .pill.env{color:#c9d3f5}
+  .grid2{display:grid;grid-template-columns:1.55fr 1fr;gap:15px} .panel{padding:15px;animation:fadeUp .5s both}
+  .panel h3{margin:0 0 12px;font-size:13px;letter-spacing:.3px;color:#dbe3ff} .panel h3 .n{color:var(--violet);font-weight:800;margin-right:6px}
+  .drop{border:1.6px dashed var(--line);border-radius:13px;padding:22px;text-align:center;color:var(--muted);cursor:pointer;transition:.18s;background:rgba(0,0,0,.15)}
+  .drop:hover,.drop.over{border-color:var(--violet);background:rgba(109,94,252,.08);color:#dbe3ff} .drop b{color:#fff} .drop .big{font-size:28px;display:block;margin-bottom:5px}
+  .ctrls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+  .sliderbox{display:flex;align-items:center;gap:9px;margin-top:12px;font-size:12.5px;color:var(--muted)}
+  input[type=range]{accent-color:var(--violet);flex:1;max-width:220px}
+  .canvas-wrap{position:relative;width:100%;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:#070b18;min-height:120px}
+  .canvas-wrap canvas,.canvas-wrap video{display:block;width:100%;height:auto}
+  .live-wrap{position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:#000}
+  .live-wrap video{display:block;width:100%} .live-wrap canvas{position:absolute;inset:0;width:100%;height:100%}
+  .empty{color:var(--muted);font-size:13px;padding:34px 10px;text-align:center}
+  .metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-bottom:12px}
+  .stat{border:1px solid var(--line);border-radius:11px;padding:9px 11px;background:rgba(0,0,0,.2)} .stat .v{font-size:18px;font-weight:800} .stat .k{font-size:10.5px;color:var(--muted);letter-spacing:.3px}
+  .objlist{display:flex;flex-direction:column;gap:6px;max-height:170px;overflow:auto}
+  .objrow{display:flex;align-items:center;gap:9px;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:9px;background:rgba(0,0,0,.18);cursor:pointer} .objrow:hover{border-color:var(--violet)} .objrow i{width:11px;height:11px;border-radius:3px;flex:none} .conf{margin-left:auto;font-size:11px;color:var(--ok)}
+  .summary{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px} .scount{font-size:12px;padding:4px 9px;border-radius:999px;border:1px solid var(--line);background:rgba(0,0,0,.2)}
+  .rel{display:inline-flex;align-items:center;gap:6px;font-size:12px;background:rgba(109,94,252,.12);border:1px solid var(--line);padding:4px 10px;border-radius:999px;margin:4px 5px 0 0} .rel b{color:#fff} .rel .v{color:var(--cyan)}
+  #minimap{width:100%;height:130px;border:1px solid var(--line);border-radius:11px;background:repeating-linear-gradient(0deg,rgba(255,255,255,.03) 0 1px,transparent 1px 22px),repeating-linear-gradient(90deg,rgba(255,255,255,.03) 0 1px,transparent 1px 22px),#0a1126;display:block}
+  .qa input{width:100%;padding:11px 13px;border-radius:11px;border:1px solid var(--line);background:rgba(0,0,0,.25);color:var(--txt);font-size:14px;outline:none} .qa input:focus{border-color:var(--violet)}
+  .qa .q{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0} .qa .q button{font-size:12.5px;padding:7px 11px;border-radius:10px;background:var(--glass2);border:1px solid var(--line);color:var(--txt)} .qa .q button:hover{border-color:var(--violet);color:#fff}
+  .answer{background:rgba(0,0,0,.22);border:1px solid var(--line);border-left:3px solid var(--cyan);border-radius:12px;padding:13px;font-size:14px;min-height:44px;line-height:1.55} .answer .ref{color:var(--cyan);font-weight:700}
+  table{width:100%;border-collapse:collapse;font-size:13px} th,td{text-align:left;padding:10px 9px;border-bottom:1px solid var(--line)} th{color:var(--muted);font-weight:600;font-size:12px}
+  .tag-role{font-size:11px;padding:3px 9px;border-radius:999px} .r-admin{background:rgba(139,123,255,.16);color:#cbbcff;border:1px solid rgba(139,123,255,.4)} .r-user{background:rgba(56,189,248,.12);color:#9fdcff;border:1px solid rgba(56,189,248,.35)}
+  .sdot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:7px}
+  .deny{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;height:44vh;text-align:center} .deny .big{font-size:46px}
+  .note{font-size:12px;color:var(--muted);margin-top:8px}
+  .hrow{display:flex;align-items:center;gap:13px;padding:12px;border:1px solid var(--line);border-radius:12px;margin-bottom:9px;background:rgba(0,0,0,.18)} .hrow .em{font-size:22px}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1a2150;border:1px solid var(--line);color:#fff;padding:10px 16px;border-radius:10px;z-index:60;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  .spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;display:inline-block;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px}
+  .modal{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;background:rgba(2,4,12,.6);backdrop-filter:blur(6px)}
+  .modal-card{max-width:720px;width:92%;max-height:84vh;overflow:auto;padding:24px}
+  .modal-card h2{margin:0 0 6px} .modal-card h4{margin:16px 0 6px;color:#cbd5ff;font-size:14px}
+  .modal-card p,.modal-card li{color:#c4cdec;font-size:13.5px;line-height:1.6} .modal-card ul{margin:6px 0;padding-left:18px}
+  .rubric{display:grid;grid-template-columns:1fr;gap:6px;margin-top:6px} .rubric .ri{display:flex;gap:10px;align-items:baseline;font-size:13px;border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:rgba(0,0,0,.18)} .rubric .w{color:var(--violet);font-weight:800;min-width:42px}
+  @keyframes sp{to{transform:rotate(360deg)}} @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  @keyframes ping{0%{box-shadow:0 0 0 0 rgba(34,211,238,.6)}70%{box-shadow:0 0 0 9px rgba(34,211,238,0)}100%{box-shadow:0 0 0 0 rgba(34,211,238,0)}}
+  @media (max-width:860px){#app{grid-template-columns:1fr} #side{display:none} .grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas><div class="veil"></div>
+
+<div id="hero">
+  <div class="hero-inner">
+    <div class="chip">◆ VinUni · VinRobotics · 20.000 nhân tài AI · Hướng #163</div>
+    <h1 class="hero-title">Hiểu cảnh quan<br><span class="grad">cho robot nhà máy</span></h1>
+    <p class="hero-sub">Module "mắt + suy luận không gian" cho robot vận chuyển trong nhà máy/kho VinFast: phát hiện người & vật cản (an toàn), dựng scene graph để điều hướng, hỏi đáp grounded — chạy thật trong trình duyệt.</p>
+    <div class="glass login-card">
+      <input id="email" value="demo@ai20k.app" /><input id="pw" type="password" value="demo1234" />
+      <button class="glow-btn" onclick="login()">Vào hệ thống →</button>
+    </div>
+    <div class="hint"><span class="pulse-dot"></span>real CV: TensorFlow.js + COCO-SSD · cần mạng để tải model lần đầu</div>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <aside id="side" class="glass">
+    <div class="brand"><div class="dot">◆</div> AI20K</div>
+    <nav class="nav" id="nav"></nav>
+    <div class="usercard">
+      <div class="urow"><div class="avatar">CT</div><div><div style="font-size:13px;font-weight:600">Cong Thai</div><div id="roleLabel" style="font-size:12px;color:var(--muted)">Admin</div></div></div>
+      <div class="roleToggle" title="Đổi vai để xem RBAC"><button id="rbAdmin" class="on" onclick="setRole('admin')">Admin</button><button id="rbUser" onclick="setRole('user')">User</button></div>
+    </div>
+  </aside>
+  <main id="main"></main>
+</div>
+<input type="file" id="fileInput" accept="image/*" class="hidden" />
+<div id="modal" class="hidden"></div>
+
+<script>
+/* ===== hero background ===== */
+let BG_ON=true;
+(function(){const cv=document.getElementById("bg");let ctx;try{ctx=cv&&cv.getContext?cv.getContext("2d"):null;}catch(e){ctx=null;}if(!ctx)return;
+  let W,H,DPR=Math.min(window.devicePixelRatio||1,2);const N=130,pts=[];let mx=0,my=0,t=0;
+  for(let i=0;i<N;i++){const u=Math.random()*2-1,th=Math.random()*6.283,r=.5+Math.random()*.55,s=Math.sqrt(1-u*u);pts.push({x:s*Math.cos(th)*r,y:u*r,z:s*Math.sin(th)*r});}
+  function rz(){W=cv.width=innerWidth*DPR;H=cv.height=innerHeight*DPR;cv.style.width=innerWidth+"px";cv.style.height=innerHeight+"px";}
+  window.addEventListener("resize",rz);rz();window.addEventListener("mousemove",e=>{mx=e.clientX/innerWidth-.5;my=e.clientY/innerHeight-.5;});
+  function rot(p,ay,ax){const cy=Math.cos(ay),sy=Math.sin(ay),cx=Math.cos(ax),sx=Math.sin(ax);let x=p.x*cy-p.z*sy,z=p.x*sy+p.z*cy,y=p.y*cx-z*sx;z=p.y*sx+z*cx;return{x,y,z};}
+  function fr(){if(!BG_ON)return;t+=.0016;ctx.clearRect(0,0,W,H);ctx.fillStyle="#05070f";ctx.fillRect(0,0,W,H);
+    const ay=t*.5+mx*.6,ax=.35+my*.4,F=2.2,D=3,sc=Math.min(W,H)*.46;
+    const pr=pts.map(p=>{const q=rot(p,ay,ax),k=F/(D+q.z);return{x:W/2+q.x*k*sc,y:H/2+q.y*k*sc,k};});
+    ctx.globalCompositeOperation="lighter";const TH=110*DPR;
+    for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){const dx=pr[i].x-pr[j].x,dy=pr[i].y-pr[j].y,d2=dx*dx+dy*dy;if(d2<TH*TH){const a=(1-Math.sqrt(d2)/TH)*.2*Math.min(pr[i].k,pr[j].k);ctx.strokeStyle="rgba(120,170,255,"+a.toFixed(3)+")";ctx.lineWidth=DPR;ctx.beginPath();ctx.moveTo(pr[i].x,pr[i].y);ctx.lineTo(pr[j].x,pr[j].y);ctx.stroke();}}
+    for(let i=0;i<N;i++){const P=pr[i],rad=Math.max(.6,(P.k-.45)*3)*DPR,b=Math.min(1,Math.max(.15,(P.k-.5)*2));ctx.fillStyle="rgba("+Math.round(120+90*b)+","+Math.round(180+50*b)+",255,"+(.35+.55*b).toFixed(2)+")";ctx.beginPath();ctx.arc(P.x,P.y,rad,0,6.283);ctx.fill();}
+    ctx.globalCompositeOperation="source-over";requestAnimationFrame(fr);}
+  requestAnimationFrame(fr);})();
+
+/* ===== model loader (robust) ===== */
+let model=null, modelState="idle", lastErr="";
+const VN={person:"người",chair:"ghế",couch:"sofa",tv:"tivi",laptop:"laptop","cell phone":"điện thoại",book:"sách",bottle:"chai",cup:"cốc","wine glass":"ly","dining table":"bàn ăn","potted plant":"chậu cây",bed:"giường",keyboard:"bàn phím",mouse:"chuột",remote:"điều khiển",clock:"đồng hồ",vase:"lọ hoa","teddy bear":"gấu bông",dog:"chó",cat:"mèo",refrigerator:"tủ lạnh",sink:"bồn rửa",microwave:"lò vi sóng",oven:"lò nướng",backpack:"ba lô",handbag:"túi xách",umbrella:"ô","traffic light":"đèn GT",car:"xe hơi"};
+function vn(c){return VN[c]?VN[c]+" ("+c+")":c;}
+function colFor(c){let h=0;for(let i=0;i<c.length;i++)h=(h*31+c.charCodeAt(i))%360;return "hsl("+h+",70%,62%)";}
+function libsReady(){return typeof tf!=="undefined"&&typeof cocoSsd!=="undefined";}
+function waitFor(cond,ms){return new Promise((res,rej)=>{const t0=Date.now();(function c(){if(cond())return res();if(Date.now()-t0>ms)return rej(new Error("timeout"));setTimeout(c,200);})();});}
+function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement("script");s.src=src;s.onload=()=>res();s.onerror=()=>rej(new Error("fail"));document.head.appendChild(s);});}
+async function injectFallback(){try{if(typeof tf==="undefined")await loadScript("https://unpkg.com/@tensorflow/tfjs@4.22.0/dist/tf.min.js");}catch(e){}try{if(typeof cocoSsd==="undefined")await loadScript("https://unpkg.com/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js");}catch(e){}}
+async function loadModel(){ if(model)return model; modelState="loading"; paintStatus();
+  try{ if(!libsReady()){try{await waitFor(libsReady,12000);}catch(_){await injectFallback();await waitFor(libsReady,12000);}} model=await cocoSsd.load(); modelState="ready"; paintStatus(); return model; }
+  catch(e){ lastErr=(e&&e.message)||String(e); modelState="error"; paintStatus(); throw e; } }
+function retryModel(){ model=null; modelState="idle"; paintStatus(); loadModel().catch(()=>{}); }
+function paintStatus(){ const el=document.getElementById("mstatus"); if(!el)return;
+  if(modelState==="idle"){el.className="pill";el.innerHTML="● Model: chưa tải";}
+  else if(modelState==="loading"){el.className="pill load";el.innerHTML='<span class="spin"></span>Đang tải model…';}
+  else if(modelState==="ready"){el.className="pill ready";el.innerHTML="● Model sẵn sàng";}
+  else {el.className="pill err";el.innerHTML='● Lỗi model · <span style="text-decoration:underline;cursor:pointer" onclick="retryModel()">Thử lại</span>';el.title="Chi tiết: "+lastErr+" — mở bằng trình duyệt thật + có mạng.";}
+}
+
+/* ===== state ===== */
+let det={imgEl:null, all:[], dets:[], rels:[], hl:[], latency:0, imgW:1, imgH:1};
+let CONF=0.35;
+let state={role:"admin",view:"detect"};
+let live={stream:null, raf:0, running:false, fps:0, last:0, lat:0};
+let CAM={}; const CAMS=[{name:"Camera 1 — Dây chuyền lắp ráp",loc:"Nhà máy VinFast",res:"1080p",live:true},{name:"Camera 2 — Kho linh kiện",loc:"Khu A",res:"1080p",live:false},{name:"Camera 3 — Khu bốc xếp",loc:"Cổng xuất",res:"720p",live:false}];
+
+function login(){ BG_ON=false; document.getElementById("hero").classList.add("gone"); const app=document.getElementById("app");
+  setTimeout(()=>{document.getElementById("hero").classList.add("hidden");app.classList.remove("hidden");requestAnimationFrame(()=>app.classList.add("show"));},560);
+  state.view="detect"; renderNav(); render(); loadModel().catch(()=>{}); }
+function setRole(r){ state.role=r; document.getElementById("rbAdmin").classList.toggle("on",r==="admin"); document.getElementById("rbUser").classList.toggle("on",r==="user");
+  document.getElementById("roleLabel").textContent=r==="admin"?"Admin":"User"; if(r==="user"&&state.view==="cameras")state.view="detect"; renderNav(); render(); }
+function renderNav(){ const items=[{k:"detect",ic:"🔍",t:"Tri giác cảnh"},{k:"live",ic:"🎥",t:"Camera robot (live)"},{k:"history",ic:"🕘",t:"Lịch sử phiên"},{k:"cameras",ic:"🎬",t:"Camera nhà máy (3)",admin:true}];
+  document.getElementById("nav").innerHTML=items.map(it=>{const lk=it.admin&&state.role!=="admin"; return '<a class="'+(state.view===it.k?'active':'')+'" onclick="go(\''+it.k+'\')"><span class="ic">'+it.ic+'</span> '+it.t+(lk?'<span class="lock">🔒</span>':'')+'</a>';}).join("")
+    +'<a onclick="openAbout()" style="margin-top:8px;color:#9be9ff"><span class="ic">🏛️</span> Kiến trúc & điểm mạnh</a>'; }
+function go(k){ if(k!=="live") stopLive(); state.view=k; renderNav(); render(); }
+function render(){ const m=document.getElementById("main"); if(state.view==="detect")return renderDetect(m); if(state.view==="live")return renderLive(m); if(state.view==="history")return renderHistory(m); if(state.view==="cameras")return renderCameras(m); }
+function topbar(t){ return '<div class="top"><div><h1>'+t+'</h1> <span class="url">https://ai20k.vercel.app</span></div><div class="meta"><span class="pill env">● PROTOTYPE</span><span id="mstatus" class="pill">● Model: chưa tải</span></div></div>'; }
+
+/* ===== DETECT ===== */
+function renderDetect(m){
+  const hasImg=!!det.imgEl;
+  m.innerHTML = topbar("Tri giác cảnh cho robot")
+   + '<div class="panel glass" style="margin-bottom:15px"><h3><span class="n">1</span>Ảnh cảnh nhà máy / kho</h3>'
+   + '<div class="drop" id="drop"><span class="big">🏭</span>Kéo–thả ảnh cảnh nhà máy/kho, hoặc <b>bấm để chọn ảnh</b> (robot sẽ "nhìn" cảnh này)</div>'
+   + '<div class="ctrls"><button class="glow-btn ghost sm" onclick="useWebcam()">📷 Chụp webcam</button><button class="glow-btn sm" id="runBtn" onclick="runDetect()"'+(det.imgEl?'':' disabled')+'>▶ Nhận diện thật</button></div>'
+   + '<div class="sliderbox">Ngưỡng confidence: <input type="range" min="0.2" max="0.8" step="0.05" value="'+CONF+'" oninput="onConf(this.value)"><span id="confv">'+Math.round(CONF*100)+'%</span></div></div>'
+   + '<div class="grid2"><div class="panel glass"><h3><span class="n">2</span>Kết quả phát hiện</h3>'
+   + '<div class="canvas-wrap" id="cwrap">'+(hasImg?'<canvas id="detcanvas"></canvas>':'<div class="empty" id="emptyc">Chưa có ảnh — kéo–thả hoặc chọn ảnh ở trên (sẽ tự nhận diện).</div>')+'</div></div>'
+   + '<div class="panel glass"><h3>Chỉ số (đo thật)</h3><div class="metrics" id="metrics">'+metricsHTML()+'</div>'
+   + '<h3>Đối tượng</h3><div id="objWrap"><div class="empty">—</div></div>'
+   + '<h3 style="margin-top:14px">Bản đồ bố cục (top-down)</h3><canvas id="minimap"></canvas>'
+   + '<h3 style="margin-top:14px">Scene graph</h3><div id="graphWrap"><div class="empty" style="padding:8px">—</div></div></div></div>'
+   + '<div class="panel glass qa" style="margin-top:15px"><h3><span class="n">3</span>Grounded QA cho robot (an toàn · điều hướng · định vị)</h3>'
+   + '<input id="qInput" placeholder="Hỏi cho robot… (vd: có người trong vùng? lối đi có vật cản? bên trái có gì?)" onkeydown="if(event.key===\'Enter\')askFree()" />'
+   + '<div class="q"><button onclick="askPreset(\'safety\')">⚠️ Có người trong vùng?</button><button onclick="askPreset(\'obstacle\')">Vật cản trên đường?</button><button onclick="askPreset(\'left\')">Bên trái?</button><button onclick="askPreset(\'right\')">Bên phải?</button><button onclick="askPreset(\'count\')">Đếm tất cả</button></div>'
+   + '<div class="answer" id="answer">Tải ảnh cảnh nhà máy/kho rồi hỏi — câu trả lời tính từ vật thể model phát hiện (an toàn / điều hướng / định vị), tô sáng box và điểm trên bản đồ bố cục.</div></div>';
+  paintStatus(); wireDrop();
+  if(hasImg){ drawResult(); renderObjs(); renderGraph(); drawMiniMap(); }
+}
+function metricsHTML(){ const n=det.dets.length, avg=n?Math.round(det.dets.reduce((s,d)=>s+d.score,0)/n*100):0;
+  return '<div class="stat"><div class="v">'+(det.latency?det.latency+'ms':'—')+'</div><div class="k">ĐỘ TRỄ INFERENCE</div></div>'
+   +'<div class="stat"><div class="v">'+n+'</div><div class="k">SỐ VẬT THỂ</div></div>'
+   +'<div class="stat"><div class="v">'+(avg||'—')+(avg?'%':'')+'</div><div class="k">CONFIDENCE TB</div></div>'
+   +'<div class="stat"><div class="v" style="font-size:13px">COCO-SSD</div><div class="k">MODEL · WebGL</div></div>'; }
+function wireDrop(){ const dz=document.getElementById("drop"), fi=document.getElementById("fileInput"); if(!dz||!fi)return;
+  dz.onclick=()=>fi.click(); fi.onchange=e=>{const f=e.target.files&&e.target.files[0];if(f)loadImageFile(f);};
+  dz.ondragover=e=>{e.preventDefault();dz.classList.add("over");}; dz.ondragleave=()=>dz.classList.remove("over");
+  dz.ondrop=e=>{e.preventDefault();dz.classList.remove("over");const f=e.dataTransfer.files&&e.dataTransfer.files[0];if(f)loadImageFile(f);}; }
+function loadImageFile(file){ if(!/^image\//.test(file.type)){toast("Vui lòng chọn tệp ảnh");return;}
+  const img=new Image(); img.onload=()=>{ det.imgEl=img; det.imgW=img.naturalWidth; det.imgH=img.naturalHeight; det.all=[]; det.dets=[]; det.rels=[]; det.hl=[]; det.latency=0;
+    render(); toast("Đã nạp ảnh — đang nhận diện…"); runDetect(); };
+  img.onerror=()=>toast("Không đọc được ảnh"); img.src=URL.createObjectURL(file); }
+async function useWebcam(){ try{ const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}}); const v=document.createElement("video"); v.srcObject=stream; v.muted=true; await v.play(); await new Promise(r=>setTimeout(r,500));
+    const c=document.createElement("canvas"); c.width=v.videoWidth||640; c.height=v.videoHeight||480; c.getContext("2d").drawImage(v,0,0); stream.getTracks().forEach(t=>t.stop());
+    const img=new Image(); img.onload=()=>{det.imgEl=img;det.imgW=img.naturalWidth;det.imgH=img.naturalHeight;det.all=[];det.dets=[];det.hl=[];render();toast("Đã chụp — đang nhận diện…");runDetect();}; img.src=c.toDataURL("image/png");
+  }catch(e){ toast("Không mở được webcam (cấp quyền / dùng https hoặc localhost)"); } }
+async function runDetect(){ if(!det.imgEl){toast("Hãy chọn ảnh trước");return;} const btn=document.getElementById("runBtn"); if(btn){btn.disabled=true;btn.innerHTML='<span class="spin"></span>Đang nhận diện…';}
+  try{ await loadModel(); const t0=performance.now(); const preds=await model.detect(det.imgEl,30,0.15); det.latency=Math.round(performance.now()-t0);
+    det.all=preds.map((p,i)=>({i:i,cls:p.class,score:p.score,bbox:p.bbox})); applyConf(); state.view="detect"; render();
+    if(det.dets.length) setAnswer('Phát hiện <span class="ref">'+det.dets.length+'</span> vật thể trong '+det.latency+'ms. Hãy đặt câu hỏi.',det.dets.map(d=>d.i));
+    else if(det.all.length) setAnswer('Có <span class="ref">'+det.all.length+'</span> vật thể nhưng dưới ngưỡng '+Math.round(CONF*100)+'% — hạ slider confidence để xem.',[]);
+    else setAnswer('Không thấy vật thể thuộc 80 lớp COCO — thử ảnh phòng/đồ vật rõ hơn.',[]);
+  }catch(e){ const msg=modelState==="error"?"⚠️ Model chưa tải được — mở bằng trình duyệt thật + có mạng, rồi bấm “Thử lại” (góc trên phải).":"⚠️ Lỗi khi nhận diện."; toast(msg); setAnswer(msg,[]); }
+  finally{ const b=document.getElementById("runBtn"); if(b){b.disabled=!det.imgEl;b.innerHTML="▶ Nhận diện thật";} } }
+function onConf(v){ CONF=parseFloat(v); const e=document.getElementById("confv"); if(e)e.textContent=Math.round(CONF*100)+"%"; if(det.all.length){ applyConf(); drawResult(); renderObjs(); renderGraph(); drawMiniMap(); document.getElementById("metrics").innerHTML=metricsHTML(); } }
+function applyConf(){ det.dets=det.all.filter(d=>d.score>=CONF).map((d,k)=>({i:k,cls:d.cls,score:d.score,bbox:d.bbox})); det.hl=[]; buildSceneGraph(); pushHistory(); }
+function center(b){return {x:b.bbox[0]+b.bbox[2]/2,y:b.bbox[1]+b.bbox[3]/2};}
+function iou(a,b){const ax2=a.bbox[0]+a.bbox[2],ay2=a.bbox[1]+a.bbox[3],bx2=b.bbox[0]+b.bbox[2],by2=b.bbox[1]+b.bbox[3];const ix=Math.max(0,Math.min(ax2,bx2)-Math.max(a.bbox[0],b.bbox[0])),iy=Math.max(0,Math.min(ay2,by2)-Math.max(a.bbox[1],b.bbox[1]));const inter=ix*iy,uni=a.bbox[2]*a.bbox[3]+b.bbox[2]*b.bbox[3]-inter;return uni>0?inter/uni:0;}
+function buildSceneGraph(){ det.rels=[]; const ds=det.dets; const seen={};
+  for(let i=0;i<ds.length;i++){ let best=-1,bd=1e9; for(let j=0;j<ds.length;j++){if(i===j)continue;const ca=center(ds[i]),cb=center(ds[j]);const d=Math.hypot(ca.x-cb.x,ca.y-cb.y);if(d<bd){bd=d;best=j;}}
+    if(best<0)continue; const a=ds[i],b=ds[best],ca=center(a),cb=center(b); let v; if(iou(a,b)>0.08)v="near"; else if(Math.abs(ca.x-cb.x)>Math.abs(ca.y-cb.y))v=ca.x<cb.x?"left of":"right of"; else v=ca.y<cb.y?"above":"below";
+    const key=Math.min(i,best)+"-"+Math.max(i,best); if(seen[key])continue; seen[key]=1; det.rels.push({from:i,to:best,v:v}); } det.rels=det.rels.slice(0,8); }
+function pushHistory(){ try{ HISTORY.unshift({t:new Date().toLocaleTimeString("vi-VN"),n:det.dets.length,ms:det.latency,top:summarize()}); if(HISTORY.length>8)HISTORY.pop(); }catch(e){} }
+function summarize(){ const c={}; det.dets.forEach(d=>c[d.cls]=(c[d.cls]||0)+1); return Object.keys(c).map(k=>c[k]+" "+k).join(", ")||"—"; }
+
+function drawResult(){ const cv=document.getElementById("detcanvas"); if(!cv||!det.imgEl)return; const img=det.imgEl, wrapW=cv.parentElement.clientWidth||640, scale=wrapW/img.naturalWidth, cw=wrapW, ch=img.naturalHeight*scale;
+  cv.width=cw; cv.height=ch; const ctx=cv.getContext("2d"); if(!ctx)return; ctx.clearRect(0,0,cw,ch); ctx.drawImage(img,0,0,cw,ch);
+  det.dets.forEach(d=>{ const on=det.hl.length===0||det.hl.indexOf(d.i)>=0; const col=colFor(d.cls); const x=d.bbox[0]*scale,y=d.bbox[1]*scale,w=d.bbox[2]*scale,h=d.bbox[3]*scale;
+    ctx.lineWidth=on?3:1.5; ctx.strokeStyle=on?col:"rgba(255,255,255,.25)"; ctx.strokeRect(x,y,w,h);
+    if(on){const lab=d.cls+" "+Math.round(d.score*100)+"%";ctx.font="700 13px Inter, system-ui";const tw=ctx.measureText(lab).width;ctx.fillStyle=col;ctx.fillRect(x,Math.max(0,y-19),tw+10,18);ctx.fillStyle="#06121f";ctx.fillText(lab,x+5,Math.max(12,y-5));} }); }
+function renderObjs(){ const el=document.getElementById("objWrap"); if(!el)return; if(!det.dets.length){el.innerHTML='<div class="empty">Không có vật thể.</div>';return;}
+  const c={}; det.dets.forEach(d=>c[d.cls]=(c[d.cls]||0)+1);
+  const sum='<div class="summary">'+Object.keys(c).sort((a,b)=>c[b]-c[a]).map(k=>'<span class="scount" style="border-color:'+colFor(k)+'66">'+c[k]+' × '+k+'</span>').join("")+'</div>';
+  const rows=det.dets.map(d=>'<div class="objrow" onclick="highlightOne('+d.i+')"><i style="background:'+colFor(d.cls)+'"></i> '+vn(d.cls)+'<span class="conf">'+Math.round(d.score*100)+'%</span></div>').join("");
+  el.innerHTML=sum+'<div class="objlist">'+rows+'</div>'; }
+function renderGraph(){ const el=document.getElementById("graphWrap"); if(!el)return; if(!det.rels.length){el.innerHTML='<div class="empty" style="padding:8px">Cần ≥2 vật thể.</div>';return;}
+  el.innerHTML=det.rels.map(r=>'<span class="rel"><b>'+det.dets[r.from].cls+'</b><span class="v">'+r.v+'</span><b>'+det.dets[r.to].cls+'</b></span>').join(""); }
+function drawMiniMap(){ const cv=document.getElementById("minimap"); if(!cv)return; const w=cv.clientWidth||300,h=130; cv.width=w; cv.height=h; const ctx=cv.getContext("2d"); if(!ctx)return; ctx.clearRect(0,0,w,h);
+  if(!det.dets.length){ctx.fillStyle="rgba(147,166,196,.6)";ctx.font="12px Inter, system-ui";ctx.fillText("(chưa có vật thể)",12,24);return;}
+  det.dets.forEach(d=>{ const cx=(d.bbox[0]+d.bbox[2]/2)/det.imgW, by=(d.bbox[1]+d.bbox[3])/det.imgH; const px=12+cx*(w-24), py=10+by*(h-20); const on=det.hl.length===0||det.hl.indexOf(d.i)>=0;
+    ctx.fillStyle=on?colFor(d.cls):"rgba(255,255,255,.2)"; ctx.beginPath(); ctx.arc(px,py,on?6:4,0,6.283); ctx.fill(); if(on){ctx.fillStyle="#cfe0ff";ctx.font="10px Inter, system-ui";ctx.fillText(d.cls,px+8,py+3);} }); }
+function highlightOne(i){ det.hl=[i]; drawResult(); drawMiniMap(); const d=det.dets[i]; setAnswer('Tô sáng <span class="ref">'+vn(d.cls)+'</span> — confidence '+Math.round(d.score*100)+'%.',null); }
+function setAnswer(html,hl){ const el=document.getElementById("answer"); if(el)el.innerHTML=html; if(hl){det.hl=hl;drawResult();drawMiniMap();} }
+
+/* ===== QA ===== */
+function classMatch(q){ q=q.toLowerCase(); for(const c of Object.keys(VN)){if(q.indexOf(c)>=0||q.indexOf(VN[c].toLowerCase())>=0)return c;} const all=[...new Set(det.dets.map(d=>d.cls))]; for(const c of all){if(q.indexOf(c.toLowerCase())>=0)return c;} return null; }
+function idxOfClass(c){return det.dets.filter(d=>d.cls===c).map(d=>d.i);}
+function askPreset(kind){ if(!det.dets.length){setAnswer("Chưa có kết quả — nhận diện một ảnh trước.",[]);return;}
+  if(kind==="safety"){ const ppl=det.dets.filter(d=>d.cls==="person"); if(ppl.length) setAnswer('⚠️ <span class="ref">'+ppl.length+' người</span> trong khung — robot cần GIẢM TỐC / DỪNG để an toàn.',ppl.map(d=>d.i)); else setAnswer('✅ Không phát hiện người — robot có thể di chuyển bình thường.',[]); return; }
+  if(kind==="obstacle"){ const obs=det.dets.filter(d=>{const cx=(d.bbox[0]+d.bbox[2]/2)/det.imgW, by=(d.bbox[1]+d.bbox[3])/det.imgH; return cx>0.3&&cx<0.7&&by>0.5;}); if(obs.length) setAnswer('Vật cản trên đường (vùng giữa, gần robot): <span class="ref">'+obs.map(d=>vn(d.cls)).join(", ")+'</span> → cần né.',obs.map(d=>d.i)); else setAnswer('✅ Lối đi phía trước thông thoáng — không có vật cản ở vùng trung tâm.',[]); return; }
+  if(kind==="count"){setAnswer('Tổng <span class="ref">'+det.dets.length+'</span> vật thể: '+summarize()+'.',det.dets.map(d=>d.i));return;}
+  if(kind==="largest"){let mx=det.dets[0];det.dets.forEach(d=>{if(d.bbox[2]*d.bbox[3]>mx.bbox[2]*mx.bbox[3])mx=d;});setAnswer('Vật lớn nhất: <span class="ref">'+vn(mx.cls)+'</span>.',[mx.i]);return;}
+  if(kind==="left"||kind==="right"){const side=det.dets.filter(d=>{const cx=d.bbox[0]+d.bbox[2]/2;return kind==="left"?cx<det.imgW*0.5:cx>=det.imgW*0.5;});
+    if(!side.length){setAnswer('Bên '+(kind==="left"?"trái":"phải")+' không có vật thể.',[]);return;} setAnswer('Bên '+(kind==="left"?"trái":"phải")+': <span class="ref">'+side.map(d=>vn(d.cls)).join(", ")+'</span>.',side.map(d=>d.i)); } }
+function askFree(){ const inp=document.getElementById("qInput"); const q=(inp&&inp.value||"").trim(); if(!q)return; if(!det.dets.length){setAnswer("Chưa có kết quả — nhận diện một ảnh trước.",[]);return;} const ql=q.toLowerCase();
+  if(/(bao nhiêu|how many|đếm|mấy|count)/.test(ql)){const c=classMatch(ql);if(c){const idx=idxOfClass(c);setAnswer('Có <span class="ref">'+idx.length+'</span> '+vn(c)+'.',idx);}else setAnswer('Tổng <span class="ref">'+det.dets.length+'</span> vật thể: '+summarize()+'.',det.dets.map(d=>d.i));return;}
+  if(/(an toàn|có người|safety|nguy hiểm|vùng robot)/.test(ql)){askPreset("safety");return;}
+  if(/(vật cản|chướng ngại|lối đi|đường đi|obstacle|cản đường|né)/.test(ql)){askPreset("obstacle");return;}
+  if(/(bên trái|left)/.test(ql)){askPreset("left");return;} if(/(bên phải|right)/.test(ql)){askPreset("right");return;} if(/(lớn nhất|largest|biggest|to nhất)/.test(ql)){askPreset("largest");return;}
+  const c=classMatch(ql); if(c){const idx=idxOfClass(c);if(idx.length)setAnswer('Có — <span class="ref">'+idx.length+' '+vn(c)+'</span> trong ảnh.',idx);else setAnswer('Không thấy '+vn(c)+' trong ảnh.',[]);return;}
+  setAnswer('Tôi thấy: <span class="ref">'+summarize()+'</span>. Thử “có người trong vùng”, “vật cản trên đường”, “bên trái”.',det.dets.map(d=>d.i)); }
+
+/* ===== REALTIME webcam ===== */
+function renderLive(m){ m.innerHTML=topbar("Camera robot (realtime) · người & vật cản")
+   +'<div class="panel glass"><h3><span class="n">🎥</span>Camera gắn trên robot — detect realtime (an toàn / né vật cản)</h3>'
+   +'<div class="ctrls" style="margin-bottom:10px"><button class="glow-btn sm" id="liveBtn" onclick="toggleLive()">▶ Bật camera</button>'
+   +'<span class="pill" id="livefps">FPS: —</span><span class="pill" id="livelat">độ trễ: —</span><span class="pill" id="livecnt">vật thể: —</span></div>'
+   +'<div class="live-wrap" id="livewrap"><video id="livevideo" playsinline muted></video><canvas id="livecanvas"></canvas></div>'
+   +'<p class="note">Mô phỏng camera trên robot vận chuyển: phát hiện người & vật cản realtime để robot giảm tốc/né — minh chứng "bộ não AI" chạy thật. Cần cấp quyền webcam (dùng https/localhost nếu trình duyệt chặn).</p></div>'; paintStatus(); }
+async function toggleLive(){ if(live.running){stopLive();return;} const btn=document.getElementById("liveBtn"); if(btn){btn.disabled=true;btn.innerHTML='<span class="spin"></span>Đang mở…';}
+  try{ await loadModel(); live.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}}); const v=document.getElementById("livevideo"); v.srcObject=live.stream; await v.play(); live.running=true; if(btn){btn.disabled=false;btn.innerHTML="⏸ Tắt camera";} liveLoop(); }
+  catch(e){ if(btn){btn.disabled=false;btn.innerHTML="▶ Bật camera";} toast(modelState==="error"?"Model chưa tải được.":"Không mở được webcam (cấp quyền / https)."); } }
+function stopLive(){ live.running=false; if(live.raf)cancelAnimationFrame(live.raf); live.raf=0; if(live.stream){live.stream.getTracks().forEach(t=>t.stop());live.stream=null;} const b=document.getElementById("liveBtn"); if(b)b.innerHTML="▶ Bật camera"; }
+async function liveLoop(){ if(!live.running)return; const v=document.getElementById("livevideo"), cv=document.getElementById("livecanvas"); if(!v||!cv){live.raf=requestAnimationFrame(liveLoop);return;}
+  if(v.videoWidth){ cv.width=v.videoWidth; cv.height=v.videoHeight; const ctx=cv.getContext("2d"); const t0=performance.now();
+    let preds=[]; try{ preds=await model.detect(v,20,CONF); }catch(e){} live.lat=Math.round(performance.now()-t0);
+    ctx.clearRect(0,0,cv.width,cv.height);
+    preds.forEach(p=>{const col=colFor(p.class);ctx.lineWidth=3;ctx.strokeStyle=col;ctx.strokeRect(p.bbox[0],p.bbox[1],p.bbox[2],p.bbox[3]);const lab=p.class+" "+Math.round(p.score*100)+"%";ctx.font="700 16px Inter, system-ui";const tw=ctx.measureText(lab).width;ctx.fillStyle=col;ctx.fillRect(p.bbox[0],Math.max(0,p.bbox[1]-22),tw+12,21);ctx.fillStyle="#06121f";ctx.fillText(lab,p.bbox[0]+6,Math.max(15,p.bbox[1]-6));});
+    const now=performance.now(); if(live.last)live.fps=Math.round(1000/(now-live.last)); live.last=now;
+    const f=document.getElementById("livefps"),l=document.getElementById("livelat"),cnt=document.getElementById("livecnt"); if(f)f.textContent="FPS: "+(live.fps||"—"); if(l)l.textContent="độ trễ: "+live.lat+"ms"; if(cnt)cnt.textContent="vật thể: "+preds.length; }
+  live.raf=requestAnimationFrame(liveLoop); }
+
+/* ===== history + users + about ===== */
+let HISTORY=[];
+function renderHistory(m){ const rows=HISTORY.length?HISTORY.map(h=>'<div class="hrow"><span class="em">🖼️</span><div><div style="font-weight:600">'+h.n+' vật thể · '+h.ms+'ms</div><div style="font-size:12px;color:var(--muted)">'+h.top+'</div></div><div style="margin-left:auto;font-size:12px;color:var(--muted)">'+h.t+'</div></div>').join(""):'<div class="empty">Chưa có phiên nhận diện nào.</div>';
+  m.innerHTML=topbar("Lịch sử phiên")+'<div class="panel glass"><h3>Các lần nhận diện trong phiên</h3>'+rows+'</div>'; paintStatus(); }
+function renderCameras(m){ if(state.role!=="admin"){m.innerHTML=topbar("Hệ thống camera")+'<div class="deny panel glass"><div class="big">🔒</div><h2 style="margin:0">403 — Cần quyền Admin</h2><p style="color:var(--muted)">Tài khoản <b style="color:#fff">User</b> không được quản lý camera. Đổi vai sang <b style="color:#fff">Admin</b> (góc trái).</p></div>';paintStatus();return;}
+  const cams=[["Camera 1 — Dây chuyền lắp ráp","Nhà máy VinFast","1080p","live","người, robot",true],["Camera 2 — Kho linh kiện","Khu A","1080p","online","pallet, thùng",false],["Camera 3 — Khu bốc xếp","Cổng xuất","720p","online","xe nâng, người",false]];
+  const cards=cams.map(c=>{ const dot=c[3]==="live"?"var(--bad)":"var(--ok)"; const stt=c[3]==="live"?"● TRỰC TIẾP":"● online"; const act=c[5]?'<button class="glow-btn sm" onclick="go(\'live\')">▶ Mở trực tiếp</button>':'<span class="pill">kênh giám sát</span>';
+    return '<div class="glass" style="padding:13px"><div style="aspect-ratio:16/9;border-radius:10px;background:linear-gradient(135deg,#0c1430,#0a1024);border:1px solid var(--line);display:grid;place-items:center;color:var(--muted);font-size:22px;margin-bottom:9px">🎥</div><div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><b style="font-size:13px">'+c[0]+'</b><span style="font-size:10.5px;color:'+dot+'">'+stt+'</span></div><div style="font-size:12px;color:var(--muted);margin:4px 0 9px">'+c[1]+' · '+c[2]+' · vật thể: '+c[4]+'</div>'+act+'</div>'; }).join("");
+  m.innerHTML=topbar("Camera nhà máy (3) · giám sát an toàn")+'<div class="panel glass"><h3>3 camera nhà máy/kho · phân quyền RBAC (chỉ Admin) · cảnh báo người vào vùng robot</h3><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">'+cards+'</div><p class="note">Mỗi camera chạy pipeline hiểu cảnh quan để <b style="color:#cfe3ff">giám sát an toàn</b> (cảnh báo khi có người trong vùng robot đang hoạt động). <b style="color:#cfe3ff">Camera 1</b> dùng webcam <b style="color:#cfe3ff">trực tiếp (nhận diện thật)</b>; Camera 2–3 là kênh giám sát mô phỏng. Ứng dụng: nhà máy/kho VinFast (VinRobotics) · tuần tra/an ninh (VinDynamics).</p></div>'; paintStatus(); }
+function openAbout(){ const r=[["30%","Độ sâu KT","Pipeline detect→scene graph→grounded QA; bản sản xuất: GroundingDINO/SAM 3 + Depth Anything V2 → 3D scene graph + VLM (Qwen3-VL), benchmark ScanQA/SQA3D."],["25%","Hợp AI/ML & CV","Thị giác máy thuần: object detection thật + suy luận không gian — đúng thế mạnh CV/VLM."],["20%","Deploy web","Bản sản xuất: Next.js (Vercel) + FastAPI; model nặng sau hàng đợi Celery/Redis → GPU worker. Demo này là FE prototype."],["15%","Khả thi 12 tuần","Dùng model pretrained off-the-shelf; đóng góp ở tầng scene graph + grounded QA, không train from scratch."],["5%","Độ mới","Open-vocab / functional 3D scene graph + RAG trên scene graph cho grounded VQA."],["5%","HST Vingroup","Pain point VinRobotics: robot vận chuyển linh kiện ở nhà máy VinFast cần mắt + suy luận không gian (an toàn tránh người/vật cản, định vị pallet/thùng, báo bất thường)."]];
+  document.getElementById("modal").className="modal"; document.getElementById("modal").innerHTML='<div class="modal-card glass"><h2>Kiến trúc & điểm mạnh theo tiêu chí chấm</h2><p style="color:var(--muted)">Bài toán: robot vận chuyển ở nhà máy/kho VinFast cần "mắt + suy luận không gian" để tránh người/vật cản, định vị vật cần lấy, báo bất thường. Demo chạy CV thật client-side (COCO-SSD, tập trung phát hiện người cho an toàn); bản sản xuất dùng open-vocab (SAM 3/DINO-X) cho vật thể công nghiệp (pallet, thùng, xe nâng) + 3D + benchmark, server-side.</p><div class="rubric">'+r.map(x=>'<div class="ri"><span class="w">'+x[0]+'</span><div><b>'+x[1]+'</b><br><span style="color:#aeb8da">'+x[2]+'</span></div></div>').join("")+'</div><div style="text-align:right;margin-top:14px"><button class="glow-btn sm" onclick="closeAbout()">Đóng</button></div></div>'; }
+function closeAbout(){ const m=document.getElementById("modal"); m.className="hidden"; m.innerHTML=""; }
+function toast(t){ const d=document.createElement("div"); d.className="toast"; d.textContent=t; document.body.appendChild(d); setTimeout(()=>d.remove(),2600); }
+window.addEventListener("resize",()=>{ if(state.view==="detect"&&det.dets.length){drawResult();drawMiniMap();} });
+</script>
+</body>
+</html>
