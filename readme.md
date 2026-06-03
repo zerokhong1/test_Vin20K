@@ -6,7 +6,7 @@ Dự án nghiên cứu và phát triển hệ thống định hướng thông mi
 
 ---
 
-## PHẦN 1: PRD (PRODUCT REQUIREMENT DOCUMENT)
+## PRD (PRODUCT REQUIREMENT DOCUMENT)
 
 ### 1. Ý nghĩa & Mục tiêu sản phẩm (Product Vision)
 Giải quyết hạn chế cốt lõi của các robot tự hành truyền thống: **Tầm nhìn cục bộ (Egocentric view)** dẫn đến việc hoàn toàn không thể phản ứng trước các mối nguy hiểm động bị che khuất sau vật cản (Occlusion). 
